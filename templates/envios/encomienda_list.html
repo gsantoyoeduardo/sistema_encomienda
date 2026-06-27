@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Listado de Encomiendas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-list me-2"></i>Listado de Encomiendas</h2>
+    <a href="{% url 'envios:encomienda_create' %}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i>Nueva Encomienda
+    </a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="estado" class="form-label">Filtrar por Estado</label>
+                <select name="estado" id="estado" class="form-select">
+                    <option value="">Todos los estados</option>
+                    {% for value, label in choices_estado %}
+                    <option value="{{ value }}" {% if estado_seleccionado == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-filter me-1"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Peso (kg)</th>
+                    <th>Estado</th>
+                    <th>Remitente</th>
+                    <th>Destinatario</th>
+                    <th>Ruta</th>
+                    <th>Fecha Envío</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for encomienda in encomiendas %}
+                <tr>
+                    <td><strong>{{ encomienda.codigo }}</strong></td>
+                    <td>{{ encomienda.descripcion|truncatechars:40 }}</td>
+                    <td>{{ encomienda.peso_kg }}</td>
+                    <td>
+                        {% if encomienda.estado == 'Registrado' %}
+                        <span class="badge bg-secondary">{{ encomienda.estado }}</span>
+                        {% elif encomienda.estado == 'En Ruta' %}
+                        <span class="badge bg-primary">{{ encomienda.estado }}</span>
+                        {% elif encomienda.estado == 'En Sucursal' %}
+                        <span class="badge bg-warning text-dark">{{ encomienda.estado }}</span>
+                        {% elif encomienda.estado == 'Entregado' %}
+                        <span class="badge bg-success">{{ encomienda.estado }}</span>
+                        {% elif encomienda.estado == 'Devuelto' %}
+                        <span class="badge bg-danger">{{ encomienda.estado }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ encomienda.remitente.nombre_completo }}</td>
+                    <td>{{ encomienda.destinatario.nombre_completo }}</td>
+                    <td>{{ encomienda.ruta.origen }} → {{ encomienda.ruta.destino }}</td>
+                    <td>{{ encomienda.fecha_envio|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        <a href="{% url 'envios:encomienda_detail' encomienda.pk %}" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                        No se encontraron encomiendas.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if is_paginated %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page=1{% if estado_seleccionado %}&estado={{ estado_seleccionado }}{% endif %}">
+                <i class="fas fa-angle-double-left"></i>
+            </a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if estado_seleccionado %}&estado={{ estado_seleccionado }}{% endif %}">
+                <i class="fas fa-angle-left"></i>
+            </a>
+        </li>
+        {% endif %}
+
+        <li class="page-item active">
+            <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        </li>
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if estado_seleccionado %}&estado={{ estado_seleccionado }}{% endif %}">
+                <i class="fas fa-angle-right"></i>
+            </a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if estado_seleccionado %}&estado={{ estado_seleccionado }}{% endif %}">
+                <i class="fas fa-angle-double-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

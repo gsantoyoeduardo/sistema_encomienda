@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalle Encomienda - {{ encomienda.codigo }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white">
+                <h4 class="mb-0"><i class="fas fa-box-open me-2"></i>{{ encomienda.codigo }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <strong>Descripción:</strong>
+                        <p class="mb-0">{{ encomienda.descripcion }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Peso:</strong>
+                        <p class="mb-0">{{ encomienda.peso_kg }} kg</p>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Estado:</strong>
+                        <p class="mb-0">
+                            {% if encomienda.estado == 'Registrado' %}
+                            <span class="badge bg-secondary">{{ encomienda.estado }}</span>
+                            {% elif encomienda.estado == 'En Ruta' %}
+                            <span class="badge bg-primary">{{ encomienda.estado }}</span>
+                            {% elif encomienda.estado == 'En Sucursal' %}
+                            <span class="badge bg-warning text-dark">{{ encomienda.estado }}</span>
+                            {% elif encomienda.estado == 'Entregado' %}
+                            <span class="badge bg-success">{{ encomienda.estado }}</span>
+                            {% elif encomienda.estado == 'Devuelto' %}
+                            <span class="badge bg-danger">{{ encomienda.estado }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Remitente:</strong>
+                        <p class="mb-0">{{ encomienda.remitente.nombre_completo }}</p>
+                        <small class="text-muted">{{ encomienda.remitente.tipo_documento }}: {{ encomienda.remitente.numero_documento }}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Destinatario:</strong>
+                        <p class="mb-0">{{ encomienda.destinatario.nombre_completo }}</p>
+                        <small class="text-muted">{{ encomienda.destinatario.tipo_documento }}: {{ encomienda.destinatario.numero_documento }}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Ruta:</strong>
+                        <p class="mb-0">{{ encomienda.ruta.origen }} → {{ encomienda.ruta.destino }}</p>
+                        <small class="text-muted">Tiempo estimado: {{ encomienda.ruta.tiempo_estimado_horas }}h</small>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Fecha de Envío:</strong>
+                        <p class="mb-0">{{ encomienda.fecha_envio|date:"d/m/Y H:i" }}</p>
+                        <strong>Entrega Estimada:</strong>
+                        <p class="mb-0">{{ encomienda.fecha_entrega_estimada|date:"d/m/Y H:i" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historial de Estados</h5>
+            </div>
+            <div class="card-body">
+                {% if historial %}
+                <div class="timeline">
+                    {% for item in historial %}
+                    <div class="border-start border-3 border-primary ps-3 mb-3">
+                        <h6 class="mb-1">
+                            {% if item.estado == 'Registrado' %}
+                            <span class="badge bg-secondary">{{ item.estado }}</span>
+                            {% elif item.estado == 'En Ruta' %}
+                            <span class="badge bg-primary">{{ item.estado }}</span>
+                            {% elif item.estado == 'En Sucursal' %}
+                            <span class="badge bg-warning text-dark">{{ item.estado }}</span>
+                            {% elif item.estado == 'Entregado' %}
+                            <span class="badge bg-success">{{ item.estado }}</span>
+                            {% elif item.estado == 'Devuelto' %}
+                            <span class="badge bg-danger">{{ item.estado }}</span>
+                            {% endif %}
+                        </h6>
+                        <small class="text-muted">{{ item.fecha_cambio|date:"d/m/Y H:i" }}</small>
+                        {% if item.detalle_observacion %}
+                        <p class="mb-0 mt-1">{{ item.detalle_observacion }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center mb-0">No hay registros en el historial.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Acciones</h5>
+                <a href="{% url 'envios:encomienda_list' %}" class="btn btn-outline-secondary w-100 mb-2">
+                    <i class="fas fa-arrow-left me-1"></i>Volver al Listado
+                </a>
+                <a href="{% url 'envios:dashboard' %}" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-tachometer-alt me-1"></i>Ir al Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
