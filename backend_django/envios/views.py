@@ -64,6 +64,20 @@ class EncomiendaDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+class PanelIntegracionView(LoginRequiredMixin, View):
+    def get(self, request):
+        total_registradas = Encomienda.objects.filter(estado=EstadoEncomienda.REGISTRADO).count()
+        total_en_ruta = Encomienda.objects.filter(estado=EstadoEncomienda.EN_RUTA).count()
+        total_entregadas = Encomienda.objects.filter(estado=EstadoEncomienda.ENTREGADO).count()
+
+        context = {
+            'total_registradas': total_registradas,
+            'total_en_ruta': total_en_ruta,
+            'total_entregadas': total_entregadas,
+        }
+        return render(request, 'envios/panel.html', context)
+
+
 class EncomiendaCreateView(LoginRequiredMixin, CreateView):
     model = Encomienda
     form_class = EncomiendaForm

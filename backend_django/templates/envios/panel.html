@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+
+{% block title %}Panel de Integración - Sistema de Encomiendas{% endblock %}
+
+{% block content %}
+<style>
+    .card-stat {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: none;
+        border-radius: 15px;
+    }
+    .card-stat:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .card-stat .icon {
+        font-size: 3rem;
+        opacity: 0.3;
+    }
+    .card-stat .number {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .console-log {
+        background: #1e1e1e;
+        color: #00ff00;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        height: 300px;
+        overflow-y: auto;
+        border-radius: 10px;
+        padding: 15px;
+    }
+    .console-log .log-entry {
+        margin-bottom: 5px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 5px;
+    }
+    .console-log .timestamp {
+        color: #888;
+    }
+    .console-log .event-type {
+        color: #ffeb3b;
+        font-weight: bold;
+    }
+    .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    .status-connected {
+        background: #00ff00;
+        box-shadow: 0 0 10px #00ff00;
+    }
+    .status-disconnected {
+        background: #ff0000;
+        box-shadow: 0 0 10px #ff0000;
+    }
+    .go-response {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        border-radius: 10px;
+        padding: 15px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .section-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+        padding: 25px;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-chart-line me-2"></i>Panel de Integración</h2>
+    <div>
+        <span class="status-indicator status-disconnected" id="ws-status-indicator"></span>
+        <span id="ws-status-text">WebSocket Desconectado</span>
+    </div>
+</div>
+
+<div class="section-card">
+    <h4 class="mb-4"><i class="fas fa-chart-bar me-2"></i>Dashboard de Encomiendas</h4>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card card-stat bg-secondary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">Registradas</h6>
+                            <div class="number" id="count-registradas">{{ total_registradas|default:0 }}</div>
+                        </div>
+                        <i class="fas fa-clipboard-list icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stat bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">En Ruta</h6>
+                            <div class="number" id="count-en-ruta">{{ total_en_ruta|default:0 }}</div>
+                        </div>
+                        <i class="fas fa-truck icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stat bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">Entregadas</h6>
+                            <div class="number" id="count-entregadas">{{ total_entregadas|default:0 }}</div>
+                        </div>
+                        <i class="fas fa-check-circle icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="mt-3 text-center">
+        <button class="btn btn-outline-primary" onclick="cargarDashboard()">
+            <i class="fas fa-sync-alt me-1"></i>Recargar Datos
+        </button>
+    </div>
+</div>
+
+<div class="section-card">
+    <h4 class="mb-4"><i class="fas fa-exchange-alt me-2"></i>Cambiar Estado de Encomienda</h4>
+    <div class="row g-3">
+        <div class="col-md-2">
+            <label class="form-label">ID/PK</label>
+            <input type="number" class="form-control" id="cambio-pk" placeholder="1" min="1">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Nuevo Estado</label>
+            <select class="form-select" id="cambio-estado-select">
+                <option value="">Seleccionar...</option>
+                <option value="Registrado">Registrado</option>
+                <option value="En Ruta">En Ruta</option>
+                <option value="En Sucursal">En Sucursal</option>
+                <option value="Entregado">Entregado</option>
+                <option value="Devuelto">Devuelto</option>
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label">Observación</label>
+            <input type="text" class="form-control" id="cambio-observacion" placeholder="Opcional">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">&nbsp;</label>
+            <button class="btn btn-warning w-100" onclick="cambiarEstado()">
+                <i class="fas fa-paper-plane me-1"></i>Enviar
+            </button>
+        </div>
+    </div>
+    <div class="mt-3">
+        <label class="form-label">Respuesta del servidor:</label>
+        <pre class="go-response" id="cambio-respuesta">Esperando respuesta...</pre>
+    </div>
+</div>
+
+<div class="section-card">
+    <h4 class="mb-4">
+        <i class="fas fa-broadcast-tower me-2"></i>Consola WebSocket en Vivo
+        <button class="btn btn-sm btn-outline-success ms-3" onclick="conectarWebSocket()">
+            <i class="fas fa-plug me-1"></i>Conectar
+        </button>
+        <button class="btn btn-sm btn-outline-danger ms-2" onclick="desconectarWebSocket()">
+            <i class="fas fa-times me-1"></i>Desconectar
+        </button>
+    </h4>
+    <div class="console-log" id="ws-console">
+        <div class="log-entry">
+            <span class="timestamp">[Sistema]</span> Consola lista. Presiona "Conectar" para iniciar.
+        </div>
+    </div>
+</div>
+
+<div class="section-card">
+    <h4 class="mb-4"><i class="fas fa-bolt me-2"></i>Microservicio Go - Procesamiento Concurrente</h4>
+    <p class="text-muted">
+        Este endpoint demuestra el procesamiento asíncrono masivo usando Goroutines, Channels y select en Go.
+        Las encomiendas con peso > 30kg se envían al canal urgente (sin buffer), las demás al canal normal (buffer 10).
+    </p>
+    <button class="btn btn-info text-white" onclick="ejecutarProcesamientoConcurrenteGo()">
+        <i class="fas fa-rocket me-1"></i>Ejecutar Procesamiento Concurrente
+    </button>
+    <div class="mt-3">
+        <label class="form-label">Respuesta del microservicio Go (Puerto 8081):</label>
+        <pre class="go-response" id="go-respuesta">Esperando ejecución...</pre>
+    </div>
+</div>
+
+<script>
+    const DJANGO_BASE_URL = window.location.origin;
+    const GO_BASE_URL = 'http://localhost:8081';
+    const WS_URL = `ws://${window.location.host}/ws/encomiendas/`;
+    const CSRF_TOKEN = '{{ csrf_token }}';
+
+    let websocket = null;
+    let reconnectInterval = null;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function cargarDashboard() {
+        fetch(`${DJANGO_BASE_URL}/api/encomiendas/`, {
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            const encomiendas = data.results || data;
+            actualizarCardsDesdeLista(encomiendas);
+            agregarLogConsole('info', `Dashboard cargado: ${encomiendas.length} encomiendas`);
+        })
+        .catch(error => {
+            agregarLogConsole('error', 'Error al cargar dashboard: ' + error.message);
+        });
+    }
+
+    function actualizarCardsDesdeLista(encomiendas) {
+        let registradas = 0;
+        let enRuta = 0;
+        let entregadas = 0;
+
+        encomiendas.forEach(enc => {
+            if (enc.estado === 'Registrado') registradas++;
+            else if (enc.estado === 'En Ruta') enRuta++;
+            else if (enc.estado === 'Entregado') entregadas++;
+        });
+
+        document.getElementById('count-registradas').textContent = registradas;
+        document.getElementById('count-en-ruta').textContent = enRuta;
+        document.getElementById('count-entregadas').textContent = entregadas;
+    }
+
+    function conectarWebSocket() {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            agregarLogConsole('info', 'WebSocket ya está conectado');
+            return;
+        }
+
+        websocket = new WebSocket(WS_URL);
+
+        websocket.onopen = function(event) {
+            agregarLogConsole('success', 'WebSocket conectado exitosamente');
+            document.getElementById('ws-status-indicator').className = 'status-indicator status-connected';
+            document.getElementById('ws-status-text').textContent = 'WebSocket Conectado';
+
+            if (reconnectInterval) {
+                clearInterval(reconnectInterval);
+                reconnectInterval = null;
+            }
+        };
+
+        websocket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            agregarLogConsole('ws', JSON.stringify(data));
+
+            if (data.type === 'cambio_estado') {
+                procesarCambioEstado(data);
+            } else if (data.type === 'connection_established') {
+                agregarLogConsole('success', data.message);
+            }
+        };
+
+        websocket.onclose = function(event) {
+            agregarLogConsole('warning', 'WebSocket desconectado. Reintentando en 3 segundos...');
+            document.getElementById('ws-status-indicator').className = 'status-indicator status-disconnected';
+            document.getElementById('ws-status-text').textContent = 'WebSocket Desconectado';
+
+            if (!reconnectInterval) {
+                reconnectInterval = setInterval(() => {
+                    agregarLogConsole('info', 'Intentando reconectar...');
+                    conectarWebSocket();
+                }, 3000);
+            }
+        };
+
+        websocket.onerror = function(error) {
+            agregarLogConsole('error', 'Error en WebSocket');
+        };
+    }
+
+    function desconectarWebSocket() {
+        if (reconnectInterval) {
+            clearInterval(reconnectInterval);
+            reconnectInterval = null;
+        }
+
+        if (websocket) {
+            websocket.close();
+            websocket = null;
+        }
+
+        agregarLogConsole('warning', 'WebSocket desconectado manualmente');
+        document.getElementById('ws-status-indicator').className = 'status-indicator status-disconnected';
+        document.getElementById('ws-status-text').textContent = 'WebSocket Desconectado';
+    }
+
+    function procesarCambioEstado(data) {
+        const countRegistradas = document.getElementById('count-registradas');
+        const countEnRuta = document.getElementById('count-en-ruta');
+        const countEntregadas = document.getElementById('count-entregadas');
+
+        let registradas = parseInt(countRegistradas.textContent);
+        let enRuta = parseInt(countEnRuta.textContent);
+        let entregadas = parseInt(countEntregadas.textContent);
+
+        if (data.estado_anterior === 'Registrado') registradas--;
+        else if (data.estado_anterior === 'En Ruta') enRuta--;
+        else if (data.estado_anterior === 'Entregado') entregadas--;
+
+        if (data.estado_nuevo === 'Registrado') registradas++;
+        else if (data.estado_nuevo === 'En Ruta') enRuta++;
+        else if (data.estado_nuevo === 'Entregado') entregadas++;
+
+        countRegistradas.textContent = Math.max(0, registradas);
+        countEnRuta.textContent = Math.max(0, enRuta);
+        countEntregadas.textContent = Math.max(0, entregadas);
+
+        agregarLogConsole('cambio_estado', 
+            `${data.codigo}: ${data.estado_anterior} → ${data.estado_nuevo} | ${data.observacion || 'Sin observación'}`
+        );
+    }
+
+    function cambiarEstado() {
+        const pk = document.getElementById('cambio-pk').value;
+        const estado = document.getElementById('cambio-estado-select').value;
+        const observacion = document.getElementById('cambio-observacion').value;
+
+        if (!pk || !estado) {
+            alert('Por favor ingresa el ID/PK y selecciona un nuevo estado');
+            return;
+        }
+
+        document.getElementById('cambio-respuesta').textContent = 'Enviando solicitud...';
+
+        fetch(`${DJANGO_BASE_URL}/api/encomiendas/${pk}/cambiar-estado/`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                estado: estado,
+                observacion: observacion
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('cambio-respuesta').textContent = JSON.stringify(data, null, 2);
+            agregarLogConsole('api', `Cambio de estado ejecutado: ${data.codigo || 'N/A'}`);
+        })
+        .catch(error => {
+            document.getElementById('cambio-respuesta').textContent = 'Error: ' + error.message;
+            agregarLogConsole('error', 'Error al cambiar estado: ' + error.message);
+        });
+    }
+
+    function ejecutarProcesamientoConcurrenteGo() {
+        document.getElementById('go-respuesta').textContent = 'Ejecutando procesamiento concurrente...';
+
+        const inicio = performance.now();
+
+        fetch(`${GO_BASE_URL}/api/go/encomiendas/procesar-concurrente`)
+        .then(response => response.json())
+        .then(data => {
+            const fin = performance.now();
+            const tiempoRespuesta = (fin - inicio).toFixed(2);
+
+            const resultado = {
+                ...data,
+                tiempo_respuesta_ms: tiempoRespuesta
+            };
+
+            document.getElementById('go-respuesta').textContent = JSON.stringify(resultado, null, 2);
+            agregarLogConsole('go', `Microservicio Go respondió en ${tiempoRespuesta}ms`);
+        })
+        .catch(error => {
+            document.getElementById('go-respuesta').textContent = 'Error: ' + error.message;
+            agregarLogConsole('error', 'Error al conectar con Go: ' + error.message);
+        });
+    }
+
+    function agregarLogConsole(tipo, mensaje) {
+        const console = document.getElementById('ws-console');
+        const timestamp = new Date().toLocaleTimeString('es-PE', { hour12: false });
+
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+
+        let colorClass = '';
+        switch(tipo) {
+            case 'success': colorClass = 'text-success'; break;
+            case 'error': colorClass = 'text-danger'; break;
+            case 'warning': colorClass = 'text-warning'; break;
+            case 'info': colorClass = 'text-info'; break;
+            case 'ws': colorClass = 'text-light'; break;
+            case 'cambio_estado': colorClass = 'text-primary'; break;
+            case 'api': colorClass = 'text-secondary'; break;
+            case 'go': colorClass = 'text-info'; break;
+            default: colorClass = 'text-light';
+        }
+
+        entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="event-type ${colorClass}">[${tipo.toUpperCase()}]</span> ${mensaje}`;
+        console.appendChild(entry);
+        console.scrollTop = console.scrollHeight;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        agregarLogConsole('info', 'Panel de Integración inicializado');
+        agregarLogConsole('info', 'Django API: ' + DJANGO_BASE_URL);
+        agregarLogConsole('info', 'Go Service: ' + GO_BASE_URL);
+        agregarLogConsole('info', 'WebSocket: ' + WS_URL);
+    });
+</script>
+{% endblock %}
