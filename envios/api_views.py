@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.core.cache import cache
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from envios.models import Encomienda, HistorialEstado
 from envios.serializers import EncomiendaSerializer, EncomiendaDetailSerializer, HistorialEstadoSerializer
@@ -88,12 +90,26 @@ class EncomiendaViewSet(viewsets.ModelViewSet):
 
         cache.delete_many(CLAVES_CACHE_ESTADISTICAS)
 
+        channel_layer = get_channel_layer()
+        fecha_cambio = timezone.now().isoformat()
+        async_to_sync(channel_layer.group_send)(
+            'encomiendas_global',
+            {
+                'type': 'encomienda_cambio_estado',
+                'codigo': encomienda.codigo,
+                'estado_anterior': estado_anterior,
+                'estado_nuevo': nuevo_estado,
+                'fecha_cambio': fecha_cambio,
+                'observacion': observacion,
+            }
+        )
+
         return Response({
-            'mensaje': f'Estado actualizado exitosamente.',
+            'mensaje': 'Estado actualizado exitosamente.',
             'codigo': encomienda.codigo,
             'estado_anterior': estado_anterior,
             'estado_nuevo': nuevo_estado,
-            'fecha_cambio': timezone.now().isoformat(),
+            'fecha_cambio': fecha_cambio,
         }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'], url_path='historial')

@@ -16,10 +16,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - encomienda_network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - encomienda_network
 
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 sistema_encomiendas.asgi:application
     volumes:
       - .:/app
     ports:
@@ -33,9 +47,19 @@ services:
       - DB_PASSWORD=encomienda2026kazel
       - DB_HOST=db
       - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - encomienda_network
 
 volumes:
   postgres_data:
+
+networks:
+  encomienda_network:
+    driver: bridge

@@ -32,6 +32,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'channels',
     'envios',
     'clientes',
     'rutas',
@@ -73,6 +75,16 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'sistema_encomiendas.wsgi.application'
+ASGI_APPLICATION = 'sistema_encomiendas.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(os.getenv('REDIS_HOST', 'redis'), int(os.getenv('REDIS_PORT', 6379)))],
+        },
+    },
+}
 
 
 DATABASES = {
