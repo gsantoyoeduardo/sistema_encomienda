@@ -28,6 +28,21 @@ type RespuestaSaludo struct {
 	Version   string `json:"version"`
 }
 
+type ResultadoDato struct {
+	TipoOriginal string      `json:"tipo_original"`
+	ValorProcesado interface{} `json:"valor_procesado"`
+	Error        string      `json:"error,omitempty"`
+}
+
+type RespuestaValidacionLote struct {
+	TotalDatos       int                    `json:"total_datos"`
+	Exitosos         int                    `json:"exitosos"`
+	Fallidos         int                    `json:"fallidos"`
+	PanicosRecuperados int                  `json:"panicos_recuperados"`
+	Resultados       []ResultadoDato        `json:"resultados"`
+	ServidorSobrevivio bool                 `json:"servidor_sobrevivio"`
+}
+
 func ProcesarEncomiendas(encomiendas []EncomiendaGo) ResultadoProcesamiento {
 	inicio := time.Now()
 
@@ -80,11 +95,37 @@ func ProcesarEncomiendas(encomiendas []EncomiendaGo) ResultadoProcesamiento {
 	}
 }
 
+func ProcesarDatoSeguro(dato interface{}) (string, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[PANIC RECOVERED] Se capturo un panic: %v\n", r)
+		}
+	}()
+
+	if dato == nil {
+		panic("no se puede procesar nil")
+	}
+
+	switch v := dato.(type) {
+	case int:
+		resultado := v * 2
+		return fmt.Sprintf("int procesado: %d * 2 = %d", v, resultado), nil
+	case string:
+		resultado := fmt.Sprintf("[%s]", v)
+		return fmt.Sprintf("string procesado: original=%q, modificado=%q", v, resultado), nil
+	case float64:
+		resultado := v * 1.5
+		return fmt.Sprintf("float64 procesado: %.2f * 1.5 = %.2f", v, resultado), nil
+	default:
+		return "", fmt.Errorf("tipo no soportado: %T", v)
+	}
+}
+
 func saludoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	respuesta := RespuestaSaludo{
-		Mensaje:   "Bienvenido al Taller de Lenguajes de Programación - Sesión 10: Estructuras de Control y Colecciones en Go",
+		Mensaje:   "Bienvenido al Taller de Lenguajes de Programacion - Sesión 11: Defer, Panic y Recover en Go",
 		Timestamp: time.Now().Format("2006-01-02 15:04:05"),
 		Version:   "go1.26.4",
 	}
@@ -128,6 +169,66 @@ func procesarEncomiendasHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resultado)
 }
 
+func validarLoteHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	datos := []interface{}{
+		42,
+		"Encomienda Express",
+		15.75,
+		nil,
+		100,
+		"Paquete Fragil",
+	}
+
+	var resultados []ResultadoDato
+	exitosos := 0
+	fallidos := 0
+	panicosRecuperados := 0
+
+	for _, dato := range datos {
+		mensaje, err := ProcesarDatoSeguro(dato)
+
+		if err != nil {
+			fallidos++
+			resultados = append(resultados, ResultadoDato{
+				TipoOriginal:     fmt.Sprintf("%T", dato),
+				ValorProcesado:   nil,
+				Error:            err.Error(),
+			})
+			continue
+		}
+
+		if mensaje == "" && err == nil {
+			panicosRecuperados++
+			resultados = append(resultados, ResultadoDato{
+				TipoOriginal:     fmt.Sprintf("%T", dato),
+				ValorProcesado:   nil,
+				Error:            "panic recuperado: dato era nil",
+			})
+			continue
+		}
+
+		exitosos++
+		resultados = append(resultados, ResultadoDato{
+			TipoOriginal:     fmt.Sprintf("%T", dato),
+			ValorProcesado:   mensaje,
+		})
+	}
+
+	respuesta := RespuestaValidacionLote{
+		TotalDatos:         len(datos),
+		Exitosos:           exitosos,
+		Fallidos:           fallidos,
+		PanicosRecuperados: panicosRecuperados,
+		Resultados:         resultados,
+		ServidorSobrevivio: true,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(respuesta)
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -140,6 +241,7 @@ func main() {
 	mux.HandleFunc("/api/go/saludo", saludoHandler)
 	mux.HandleFunc("/api/go/encomiendas", encomiendasHandler)
 	mux.HandleFunc("/api/go/encomiendas/procesar", procesarEncomiendasHandler)
+	mux.HandleFunc("/api/go/encomiendas/validar-lote", validarLoteHandler)
 	mux.HandleFunc("/health", healthHandler)
 
 	fmt.Println("==============================================")
@@ -149,6 +251,7 @@ func main() {
 	fmt.Println("    - GET /api/go/saludo")
 	fmt.Println("    - GET /api/go/encomiendas")
 	fmt.Println("    - GET /api/go/encomiendas/procesar")
+	fmt.Println("    - GET /api/go/encomiendas/validar-lote")
 	fmt.Println("    - GET /health")
 	fmt.Println("==============================================")
 
