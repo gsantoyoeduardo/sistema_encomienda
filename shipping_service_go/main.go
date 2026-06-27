@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -28,19 +29,112 @@ type RespuestaSaludo struct {
 	Version   string `json:"version"`
 }
 
-type ResultadoDato struct {
-	TipoOriginal string      `json:"tipo_original"`
-	ValorProcesado interface{} `json:"valor_procesado"`
-	Error        string      `json:"error,omitempty"`
+type RespuestaConcurrente struct {
+	Mensaje           string `json:"mensaje"`
+	TotalEncomiendas  int    `json:"total_encomiendas"`
+	UrgentesEnviadas  int    `json:"urgentes_enviadas"`
+	NormalesEnviadas  int    `json:"normales_enviadas"`
+	Timestamp         string `json:"timestamp"`
 }
 
-type RespuestaValidacionLote struct {
-	TotalDatos       int                    `json:"total_datos"`
-	Exitosos         int                    `json:"exitosos"`
-	Fallidos         int                    `json:"fallidos"`
-	PanicosRecuperados int                  `json:"panicos_recuperados"`
-	Resultados       []ResultadoDato        `json:"resultados"`
-	ServidorSobrevivio bool                 `json:"servidor_sobrevivio"`
+type EstadisticasCanales struct {
+	UrgentesLen int `json:"urgentes_len"`
+	UrgentesCap int `json:"urgentes_cap"`
+	NormalesLen int `json:"normales_len"`
+	NormalesCap int `json:"normales_cap"`
+	AlertasLen  int `json:"alertas_len"`
+	AlertasCap  int `json:"alertas_cap"`
+}
+
+type ProcesadorEnvios interface {
+	ProcesarConcurrente()
+	EnviarUrgente(enc EncomiendaGo)
+	EnviarNormal(enc EncomiendaGo)
+	EnviarAlerta(mensaje string)
+	GetEstadisticas() EstadisticasCanales
+}
+
+type SistemaEnviosGo struct {
+	canalUrgentes chan EncomiendaGo
+	canalNormales chan EncomiendaGo
+	canalAlertas  chan string
+	mu            sync.Mutex
+	resultados    []string
+}
+
+func NewSistemaEnviosGo() *SistemaEnviosGo {
+	return &SistemaEnviosGo{
+		canalUrgentes: make(chan EncomiendaGo),
+		canalNormales: make(chan EncomiendaGo, 10),
+		canalAlertas:  make(chan string, 5),
+		resultados:    make([]string, 0),
+	}
+}
+
+func (s *SistemaEnviosGo) ProcesarConcurrente() {
+	go func() {
+		timeout := time.After(30 * time.Second)
+		tick := time.Tick(5 * time.Second)
+
+		for {
+			select {
+			case enc := <-s.canalUrgentes:
+				s.mu.Lock()
+				mensaje := fmt.Sprintf("[URGENTE] Encomienda %s procesada inmediatamente - Peso: %.2f kg", enc.Codigo, enc.PesoKg)
+				s.resultados = append(s.resultados, mensaje)
+				fmt.Println(mensaje)
+				s.mu.Unlock()
+
+			case enc := <-s.canalNormales:
+				s.mu.Lock()
+				mensaje := fmt.Sprintf("[NORMAL] Encomienda %s procesada asíncronamente - Peso: %.2f kg", enc.Codigo, enc.PesoKg)
+				s.resultados = append(s.resultados, mensaje)
+				fmt.Println(mensaje)
+				s.mu.Unlock()
+
+			case alerta := <-s.canalAlertas:
+				s.mu.Lock()
+				mensaje := fmt.Sprintf("[ALERTA] %s", alerta)
+				s.resultados = append(s.resultados, mensaje)
+				fmt.Println(mensaje)
+				s.mu.Unlock()
+
+			case <-tick:
+				stats := s.GetEstadisticas()
+				fmt.Printf("[STATS] Urgentes: %d/%d | Normales: %d/%d | Alertas: %d/%d\n",
+					stats.UrgentesLen, stats.UrgentesCap,
+					stats.NormalesLen, stats.NormalesCap,
+					stats.AlertasLen, stats.AlertasCap)
+
+			case <-timeout:
+				fmt.Println("[TIMEOUT] Procesamiento concurrente finalizado después de 30 segundos")
+				return
+			}
+		}
+	}()
+}
+
+func (s *SistemaEnviosGo) EnviarUrgente(enc EncomiendaGo) {
+	s.canalUrgentes <- enc
+}
+
+func (s *SistemaEnviosGo) EnviarNormal(enc EncomiendaGo) {
+	s.canalNormales <- enc
+}
+
+func (s *SistemaEnviosGo) EnviarAlerta(mensaje string) {
+	s.canalAlertas <- mensaje
+}
+
+func (s *SistemaEnviosGo) GetEstadisticas() EstadisticasCanales {
+	return EstadisticasCanales{
+		UrgentesLen: len(s.canalUrgentes),
+		UrgentesCap: cap(s.canalUrgentes),
+		NormalesLen: len(s.canalNormales),
+		NormalesCap: cap(s.canalNormales),
+		AlertasLen:  len(s.canalAlertas),
+		AlertasCap:  cap(s.canalAlertas),
+	}
 }
 
 func ProcesarEncomiendas(encomiendas []EncomiendaGo) ResultadoProcesamiento {
@@ -95,39 +189,13 @@ func ProcesarEncomiendas(encomiendas []EncomiendaGo) ResultadoProcesamiento {
 	}
 }
 
-func ProcesarDatoSeguro(dato interface{}) (string, error) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("[PANIC RECOVERED] Se capturo un panic: %v\n", r)
-		}
-	}()
-
-	if dato == nil {
-		panic("no se puede procesar nil")
-	}
-
-	switch v := dato.(type) {
-	case int:
-		resultado := v * 2
-		return fmt.Sprintf("int procesado: %d * 2 = %d", v, resultado), nil
-	case string:
-		resultado := fmt.Sprintf("[%s]", v)
-		return fmt.Sprintf("string procesado: original=%q, modificado=%q", v, resultado), nil
-	case float64:
-		resultado := v * 1.5
-		return fmt.Sprintf("float64 procesado: %.2f * 1.5 = %.2f", v, resultado), nil
-	default:
-		return "", fmt.Errorf("tipo no soportado: %T", v)
-	}
-}
-
 func saludoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	respuesta := RespuestaSaludo{
-		Mensaje:   "Bienvenido al Taller de Lenguajes de Programacion - Sesión 11: Defer, Panic y Recover en Go",
+		Mensaje:   "Bienvenido al Taller de Lenguajes de Programación - Sesión 12: POO, Goroutines y Channels en Go",
 		Timestamp: time.Now().Format("2006-01-02 15:04:05"),
-		Version:   "go1.26.4",
+		Version:   "go1.21",
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -169,60 +237,52 @@ func procesarEncomiendasHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resultado)
 }
 
-func validarLoteHandler(w http.ResponseWriter, r *http.Request) {
+func procesarConcurrenteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	datos := []interface{}{
-		42,
-		"Encomienda Express",
-		15.75,
-		nil,
-		100,
-		"Paquete Fragil",
+	encomiendas := []EncomiendaGo{
+		{ID: 1, Codigo: "ENC-000001-LM", PesoKg: 2.5, Estado: "Registrado", Destino: "Lima"},
+		{ID: 2, Codigo: "ENC-000002-PA", PesoKg: 35.0, Estado: "Registrado", Destino: "Arequipa"},
+		{ID: 3, Codigo: "ENC-000003-CU", PesoKg: 1.8, Estado: "Registrado", Destino: "Cusco"},
+		{ID: 4, Codigo: "ENC-000004-TR", PesoKg: 42.5, Estado: "Registrado", Destino: "Trujillo"},
+		{ID: 5, Codigo: "ENC-000005-PI", PesoKg: 15.0, Estado: "Registrado", Destino: "Piura"},
+		{ID: 6, Codigo: "ENC-000006-CH", PesoKg: 8.2, Estado: "Registrado", Destino: "Chiclayo"},
+		{ID: 7, Codigo: "ENC-000007-HU", PesoKg: 50.0, Estado: "Registrado", Destino: "Huancayo"},
+		{ID: 8, Codigo: "ENC-000008-IC", PesoKg: 3.7, Estado: "Registrado", Destino: "Ica"},
+		{ID: 9, Codigo: "ENC-000009-TA", PesoKg: 28.3, Estado: "Registrado", Destino: "Tacna"},
+		{ID: 10, Codigo: "ENC-000010-PU", PesoKg: 12.0, Estado: "Registrado", Destino: "Puno"},
 	}
 
-	var resultados []ResultadoDato
-	exitosos := 0
-	fallidos := 0
-	panicosRecuperados := 0
+	sistema := NewSistemaEnviosGo()
+	sistema.ProcesarConcurrente()
 
-	for _, dato := range datos {
-		mensaje, err := ProcesarDatoSeguro(dato)
+	urgentesCount := 0
+	normalesCount := 0
 
-		if err != nil {
-			fallidos++
-			resultados = append(resultados, ResultadoDato{
-				TipoOriginal:     fmt.Sprintf("%T", dato),
-				ValorProcesado:   nil,
-				Error:            err.Error(),
-			})
-			continue
-		}
-
-		if mensaje == "" && err == nil {
-			panicosRecuperados++
-			resultados = append(resultados, ResultadoDato{
-				TipoOriginal:     fmt.Sprintf("%T", dato),
-				ValorProcesado:   nil,
-				Error:            "panic recuperado: dato era nil",
-			})
-			continue
-		}
-
-		exitosos++
-		resultados = append(resultados, ResultadoDato{
-			TipoOriginal:     fmt.Sprintf("%T", dato),
-			ValorProcesado:   mensaje,
-		})
+	for _, enc := range encomiendas {
+		go func(e EncomiendaGo) {
+			if e.PesoKg > 30.0 {
+				sistema.EnviarUrgente(e)
+			} else {
+				sistema.EnviarNormal(e)
+			}
+		}(enc)
 	}
 
-	respuesta := RespuestaValidacionLote{
-		TotalDatos:         len(datos),
-		Exitosos:           exitosos,
-		Fallidos:           fallidos,
-		PanicosRecuperados: panicosRecuperados,
-		Resultados:         resultados,
-		ServidorSobrevivio: true,
+	for _, enc := range encomiendas {
+		if enc.PesoKg > 30.0 {
+			urgentesCount++
+		} else {
+			normalesCount++
+		}
+	}
+
+	respuesta := RespuestaConcurrente{
+		Mensaje:          "Procesamiento concurrente iniciado. Las encomiendas se están procesando en segundo plano.",
+		TotalEncomiendas: len(encomiendas),
+		UrgentesEnviadas: urgentesCount,
+		NormalesEnviadas: normalesCount,
+		Timestamp:        time.Now().Format("2006-01-02 15:04:05"),
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -241,7 +301,7 @@ func main() {
 	mux.HandleFunc("/api/go/saludo", saludoHandler)
 	mux.HandleFunc("/api/go/encomiendas", encomiendasHandler)
 	mux.HandleFunc("/api/go/encomiendas/procesar", procesarEncomiendasHandler)
-	mux.HandleFunc("/api/go/encomiendas/validar-lote", validarLoteHandler)
+	mux.HandleFunc("/api/go/encomiendas/procesar-concurrente", procesarConcurrenteHandler)
 	mux.HandleFunc("/health", healthHandler)
 
 	fmt.Println("==============================================")
@@ -251,7 +311,7 @@ func main() {
 	fmt.Println("    - GET /api/go/saludo")
 	fmt.Println("    - GET /api/go/encomiendas")
 	fmt.Println("    - GET /api/go/encomiendas/procesar")
-	fmt.Println("    - GET /api/go/encomiendas/validar-lote")
+	fmt.Println("    - GET /api/go/encomiendas/procesar-concurrente")
 	fmt.Println("    - GET /health")
 	fmt.Println("==============================================")
 
